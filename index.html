@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D&D Grid Tool</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #111;
+      color: #eee;
+      font-family: sans-serif;
+      overflow: hidden; /* prevent scroll while dragging */
+    }
+
+    /* ── Controls bar ── */
+    #controls {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      background: rgba(0,0,0,0.75);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    #controls label { display: flex; align-items: center; gap: 4px; }
+    #controls input[type=number] { width: 56px; padding: 2px 4px; }
+    #controls button { padding: 3px 8px; cursor: pointer; }
+
+    /* ── Canvas sits below the controls bar ── */
+    canvas {
+      display: block;
+      position: fixed;
+      /* top is set by JS once we know controls height */
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Controls ── -->
+<div id="controls">
+  <label>
+    Cell size (px):
+    <input id="cellSizeInput" type="number" min="10" max="200" value="60" />
+  </label>
+  <button id="applyBtn">Apply</button>
+
+  <label>
+    BG image:
+    <input id="bgUpload" type="file" accept="image/*" />
+  </label>
+
+  <!-- Background scale slider; only visible once an image is loaded -->
+  <label id="scaleLabel" style="display:none;">
+    BG scale:
+    <input id="bgScale" type="range" min="0.1" max="5" step="0.05" value="1" />
+  </label>
+
+  <span id="moveInfo" style="margin-left:auto;">Movement: 0 / 6 squares</span>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// ─────────────────────────────────────────────
+// CONFIG / STATE
+// ─────────────────────────────────────────────
+
+let CELL = 60;               // pixels per grid cell (user-adjustable)
+const MAX_MOVES = 6;         // max squares a piece can travel per turn
+
+// Grid dimensions (recalculated whenever CELL or window size changes)
+let COLS = 0;
+let ROWS = 0;
+
+// Background image state
+let bgImage    = null;   // HTMLImageElement
+let bgScale    = 1.0;    // zoom factor for the background image
+
+// Player piece state
+// gridX / gridY are the column / row indices (0-based) of the piece's cell
+let player = {
+  gridX: 2,
+  gridY: 2
+};
+
+// Drag state
+let drag = {
+  active:    false,
+  startGX:   0,     // grid position at the START of the drag gesture
+  startGY:   0,
+  visitedCells: [], // array of {x,y} cells visited during this drag (for highlight + movement limit)
+};
+
+// Canvas & 2D context
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
+
+// ─────────────────────────────────────────────
+// LAYOUT HELPERS
+// ─────────────────────────────────────────────
+
+/**
+ * Returns the height of the controls bar so the canvas can be
+ * positioned directly below it.
+ */
+function controlsHeight() {
+  return document.getElementById("controls").offsetHeight;
+}
+
+/**
+ * Resize the canvas to fill the screen below the controls bar,
+ * snapping to a whole number of cells so we never have partial cells.
+ */
+function resizeCanvas() {
+  const ctrlH      = controlsHeight();
+  const availW     = window.innerWidth;
+  const availH     = window.innerHeight - ctrlH;
+
+  // How many complete cells fit?
+  COLS = Math.floor(availW / CELL);
+  ROWS = Math.floor(availH / CELL);
+
+  // Canvas is exactly cols*cell wide and rows*cell tall
+  canvas.width  = COLS * CELL;
+  canvas.height = ROWS * CELL;
+
+  // Position canvas just below controls
+  canvas.style.top  = ctrlH + "px";
+  canvas.style.left = "0px";
+
+  // Make sure player is still inside the (possibly smaller) grid
+  player.gridX = Math.min(player.gridX, COLS - 1);
+  player.gridY = Math.min(player.gridY, ROWS - 1);
+}
+
+// ─────────────────────────────────────────────
+// COORDINATE UTILITIES
+// ─────────────────────────────────────────────
+
+/**
+ * Convert a pointer position (relative to the page) to a grid cell.
+ * Returns {gx, gy} clamped to valid grid bounds, or null if outside canvas.
+ */
+function pageToGrid(pageX, pageY) {
+  const rect = canvas.getBoundingClientRect();
+  const x = pageX - rect.left;
+  const y = pageY - rect.top;
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
+  return {
+    gx: Math.floor(x / CELL),
+    gy: Math.floor(y / CELL)
+  };
+}
+
+/** Center-pixel of a grid cell on the canvas */
+function cellCenter(gx, gy) {
+  return {
+    cx: gx * CELL + CELL / 2,
+    cy: gy * CELL + CELL / 2
+  };
+}
+
+// ─────────────────────────────────────────────
+// DRAG LOGIC
+// ─────────────────────────────────────────────
+
+/**
+ * Called when the pointer first goes down.
+ * Starts a drag only if the pointer lands on the player piece.
+ */
+function onPointerDown(pageX, pageY) {
+  const cell = pageToGrid(pageX, pageY);
+  if (!cell) return;
+
+  // Check if the touch is on the player's cell
+  if (cell.gx === player.gridX && cell.gy === player.gridY) {
+    drag.active    = true;
+    drag.startGX   = player.gridX;
+    drag.startGY   = player.gridY;
+    // The starting cell counts as visited (0 moves used)
+    drag.visitedCells = [{ x: player.gridX, y: player.gridY }];
+    updateMoveInfo();
+  }
+}
+
+/**
+ * Called continuously while the pointer moves.
+ * Updates the player piece position if we are dragging,
+ * respecting the movement limit.
+ */
+function onPointerMove(pageX, pageY) {
+  if (!drag.active) return;
+
+  const cell = pageToGrid(pageX, pageY);
+  if (!cell) return;
+
+  const { gx, gy } = cell;
+
+  // If the finger is already on the current cell, nothing to do
+  if (gx === player.gridX && gy === player.gridY) return;
+
+  // ── Check if we're retracing a previously visited cell ──
+  // Walking backwards is free (we un-visit the last cell instead of adding one).
+  const prevIdx = drag.visitedCells.findIndex(c => c.x === gx && c.y === gy);
+
+  if (prevIdx !== -1) {
+    // Retrace: trim the visit list back to this cell
+    drag.visitedCells = drag.visitedCells.slice(0, prevIdx + 1);
+    player.gridX = gx;
+    player.gridY = gy;
+    updateMoveInfo();
+    render();
+    return;
+  }
+
+  // ── It's a new cell -- check movement budget ──
+  // Squares used = visitedCells.length - 1  (start cell is free)
+  const squaresUsed = drag.visitedCells.length - 1;
+  if (squaresUsed >= MAX_MOVES) {
+    // Budget exhausted; refuse to move further
+    return;
+  }
+
+  // Move is allowed: record the new cell and update piece position
+  drag.visitedCells.push({ x: gx, y: gy });
+  player.gridX = gx;
+  player.gridY = gy;
+  updateMoveInfo();
+  render();
+}
+
+/** Called when the pointer is released; ends the drag. */
+function onPointerUp() {
+  if (!drag.active) return;
+  drag.active = false;
+  // Keep the green trail visible until a new drag starts
+  render();
+}
+
+// ─────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────
+
+function updateMoveInfo() {
+  const used = drag.active ? drag.visitedCells.length - 1 : 0;
+  document.getElementById("moveInfo").textContent =
+    `Movement: ${used} / ${MAX_MOVES} squares`;
+}
+
+// ─────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 1. Background image (if loaded)
+  if (bgImage) {
+    // Scale and center the image on the canvas
+    const imgW = bgImage.naturalWidth  * bgScale;
+    const imgH = bgImage.naturalHeight * bgScale;
+    const offX = (canvas.width  - imgW) / 2;
+    const offY = (canvas.height - imgH) / 2;
+    ctx.drawImage(bgImage, offX, offY, imgW, imgH);
+  } else {
+    // Plain dark background
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 2. Grid lines
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth   = 1;
+
+  for (let col = 0; col <= COLS; col++) {
+    ctx.beginPath();
+    ctx.moveTo(col * CELL, 0);
+    ctx.lineTo(col * CELL, canvas.height);
+    ctx.stroke();
+  }
+  for (let row = 0; row <= ROWS; row++) {
+    ctx.beginPath();
+    ctx.moveTo(0, row * CELL);
+    ctx.lineTo(canvas.width, row * CELL);
+    ctx.stroke();
+  }
+
+  // 3. Green highlight for visited cells (skip the very first / start cell
+  //    so the origin doesn't turn green when idle)
+  if (drag.visitedCells.length > 1) {
+    ctx.fillStyle = "rgba(0, 200, 80, 0.45)";
+    // Highlight all cells except index 0 (the start)
+    for (let i = 1; i < drag.visitedCells.length; i++) {
+      const { x, y } = drag.visitedCells[i];
+      ctx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+    }
+  }
+
+  // 4. Player piece (red circle)
+  const { cx, cy } = cellCenter(player.gridX, player.gridY);
+  const radius = CELL * 0.38; // slightly smaller than the cell
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle   = "crimson";
+  ctx.fill();
+  ctx.strokeStyle = "white";
+  ctx.lineWidth   = 2;
+  ctx.stroke();
+}
+
+// ─────────────────────────────────────────────
+// EVENT LISTENERS
+// ─────────────────────────────────────────────
+
+// ── Pointer events (handles both mouse and touch via unified API) ──
+
+canvas.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId); // keep receiving events even if finger drifts off
+  onPointerDown(e.clientX, e.clientY);
+});
+
+canvas.addEventListener("pointermove", e => {
+  e.preventDefault();
+  onPointerMove(e.clientX, e.clientY);
+});
+
+canvas.addEventListener("pointerup", e => {
+  e.preventDefault();
+  onPointerUp();
+});
+
+canvas.addEventListener("pointercancel", () => {
+  drag.active = false;
+  render();
+});
+
+// ── Cell size control ──
+
+document.getElementById("applyBtn").addEventListener("click", () => {
+  const val = parseInt(document.getElementById("cellSizeInput").value, 10);
+  if (!isNaN(val) && val >= 10 && val <= 200) {
+    CELL = val;
+    resizeCanvas();
+    render();
+  }
+});
+
+// Allow pressing Enter in the cell size field too
+document.getElementById("cellSizeInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("applyBtn").click();
+});
+
+// ── Background image upload ──
+
+document.getElementById("bgUpload").addEventListener("change", function () {
+  const file = this.files[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    bgImage = img;
+    // Reset scale to fit the canvas height by default
+    bgScale = canvas.height / img.naturalHeight;
+    document.getElementById("bgScale").value = bgScale.toFixed(2);
+    document.getElementById("scaleLabel").style.display = "flex";
+    render();
+  };
+  img.src = url;
+});
+
+// ── Background scale slider ──
+
+document.getElementById("bgScale").addEventListener("input", function () {
+  bgScale = parseFloat(this.value);
+  render();
+});
+
+// ── Window resize ──
+
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  render();
+});
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+
+resizeCanvas();
+render();
+</script>
+</body>
+</html>
