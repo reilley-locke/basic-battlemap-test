@@ -2,6 +2,10 @@
 //    VARIABLES
 // ╘═════════════╛
 
+// WEBSOCKET
+// --------------------
+var socket = io();
+
 // SETTINGS
 // --------------------
 var cellSize = 60;          // how many pixels wide/tall each grid square is
@@ -197,6 +201,14 @@ function onPointerMove(pageX, pageY) {
     drag.visitedCells.push({ x: gx, y: gy });
     currentToken.gridX = gx;
     currentToken.gridY = gy;
+
+    // Hey server machine! Sync that shit!
+    socket.emit('tokenMove', {
+        index: drag.targetIndex,
+        x: gx,
+        y: gy
+    });
+
     updateMoveInfo();
     render();
 }
@@ -299,8 +311,8 @@ function render() {
 
 function generateRandomRgbColor() {
     const r = Math.floor(Math.random() * 256); // Random number between 0-255
-    const g = Math.floor(Math.random() * 256); 
-    const b = Math.floor(Math.random() * 256); 
+    const g = Math.floor(Math.random() * 256);
+    const b = Math.floor(Math.random() * 256);
 
     return `rgb(${r}, ${g}, ${b})`;
 }
@@ -410,6 +422,13 @@ document.getElementById("addTokenBtn").addEventListener("click", function () {
         color: generateRandomRgbColor() // Give new tokens a different color to start (generates random)
     });
     render(); // Redraw to show the new token
+});
+
+socket.on('tokenUpdate', function (data) {
+    // Update local list with the data from someone else
+    tokens[data.index].gridX = data.x;
+    tokens[data.index].gridY = data.y;
+    render(); // Redraw the screen
 });
 
 
