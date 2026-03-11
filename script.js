@@ -209,7 +209,7 @@ function updateMoveInfo() {
     if (drag.active) {
         movesUsed = drag.visitedCells.length - 1;
     }
-    document.getElementById("moveInfo").textContent = "Movement: " + movesUsed + " / " + MAX_MOVES + " squares";
+    document.getElementById("movementInfo").textContent = "Movement: " + movesUsed + " / " + MAX_MOVES + " squares";
 }
 
 
