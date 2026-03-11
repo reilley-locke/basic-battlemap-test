@@ -428,21 +428,19 @@ document.getElementById("addTokenBtn").addEventListener("click", function () {
     render(); 
 });
 
+// 1. Listen for moves from others
+socket.on('tokenUpdate', function (data) {
+    if (tokens[data.index]) {
+        tokens[data.index].gridX = data.x;
+        tokens[data.index].gridY = data.y;
+        render();
+    }
+});
+
 // Add this listener at the bottom with your other socket.on events
 socket.on('addRemoteToken', function (data) {
     tokens.push(data);
     render();
-});
-
-io.on('connection', (socket) => {
-    socket.on('tokenMove', (data) => {
-        socket.broadcast.emit('tokenUpdate', data);
-    });
-
-    // NEW: Listen for new tokens and tell everyone else
-    socket.on('newToken', (data) => {
-        socket.broadcast.emit('addRemoteToken', data);
-    });
 });
 
 

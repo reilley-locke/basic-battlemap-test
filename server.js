@@ -3,12 +3,19 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
-app.use(express.static(__dirname)); // Serves your index.html/script.js
+app.use(express.static(__dirname));
 
 io.on('connection', (socket) => {
-    // When a player moves a token, broadcast that move to everyone else
+    console.log('A user connected');
+
+    // Handle Movement
     socket.on('tokenMove', (data) => {
         socket.broadcast.emit('tokenUpdate', data);
+    });
+
+    // Handle New Tokens
+    socket.on('newToken', (data) => {
+        socket.broadcast.emit('addRemoteToken', data);
     });
 });
 
