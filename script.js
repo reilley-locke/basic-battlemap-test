@@ -288,21 +288,21 @@ function render() {
 
 // --- Pointer events (works for both mouse and touch) ---
 
-canvas.addEventListener("pointerdown", function (e) {
+canvas.addEventListener("pointerdown", function(e) {
     e.preventDefault();
-    canvas.setPointerCapture(e.pointerId); // keeps tracking even if the finger drifts off the canvas
+    canvas.setPointerCapture(e.pointerId);
     onPointerDown(e.clientX, e.clientY);
-});
+}, { passive: false });  // passive: false lets preventDefault() actually work on touch
 
-canvas.addEventListener("pointermove", function (e) {
+canvas.addEventListener("pointermove", function(e) {
     e.preventDefault();
     onPointerMove(e.clientX, e.clientY);
-});
+}, { passive: false });
 
-canvas.addEventListener("pointerup", function (e) {
+canvas.addEventListener("pointerup", function(e) {
     e.preventDefault();
     onPointerUp();
-});
+}, { passive: false });
 
 canvas.addEventListener("pointercancel", function () {
     drag.active = false;
