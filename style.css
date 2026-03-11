@@ -1,0 +1,68 @@
+/* ══════════════════════════════════
+          CSS REMINDERS/NOTES
+   ══════════════════════════════════ 
+   --> # is for ID Selector (unique, individual elements)
+   --> . is for Class Selector (used to style multiple elements)
+   Padding goes by (top, right, bottom, left)
+   --> padding can also just have two numbers (top/bottom, right/left)
+*/
+
+/* Remove default spacing that most browsers add because I want the whole screen to be a grid */
+* { /*<------ UNIVERSAL SELECTOR (global styling) */
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #111;
+    color: #eee;
+    font-family: sans-serif;
+    /* stops the page from scrolling when the player drags their piece around */
+    overflow: hidden;
+}
+
+/* Controls bar pinned to the top left of the screen */
+#controls {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100; /* "z" direction is basically the layers. Higher Z-index = in front of more stuff*/
+    background-color: rgba(0, 0, 0, 0.75);
+    padding: 6px 10px;
+    font-size: 13px;
+
+    /* Flexbox to lay everything out in a single row (i.e. in a bar) */
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Make the number input a reasonable width so it doesn't stretch and look gross */
+#cellSizeInput {
+    width: 56px;
+    padding: 2px 4px;
+}
+
+/* Just a tiny bit of padding on the 'Apply' button to make it look nicer :)*/
+#applyBtn {
+    padding: 3px 8px;
+    cursor: pointer;
+}
+
+/* Push the move counter all the way to the right */
+#movementInfo {
+    margin-left: auto; /* I don't like that it's "margin-left" but WHATEVER average CSS moment*/
+}
+
+/* The canvas goes below the controls bar (NOT OVERLAPPED)
+   The exact top position is set in script.js once its determined how tall the controls bar is */
+#canvas {
+    display: block;
+    position: fixed;
+    left: 0px;
+    touch-action: none; /* Prevent default touch behaviors like scrolling and zooming, which is common with multiple fingers touching the screen (would be really annoying lol) */
+
+}
