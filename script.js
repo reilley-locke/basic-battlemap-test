@@ -415,20 +415,34 @@ window.addEventListener("resize", function () {
 
 // NEW: --- Add token ---
 document.getElementById("addTokenBtn").addEventListener("click", function () {
-    // Add a new token object to  array
-    tokens.push({
+    var newToken = {
         gridX: 1,
         gridY: 1,
-        color: generateRandomRgbColor() // Give new tokens a different color to start (generates random)
-    });
-    render(); // Redraw to show the new token
+        color: generateRandomRgbColor()
+    };
+    tokens.push(newToken);
+    
+    // TELL THE SERVER
+    socket.emit('newToken', newToken); 
+    
+    render(); 
 });
 
-socket.on('tokenUpdate', function (data) {
-    // Update local list with the data from someone else
-    tokens[data.index].gridX = data.x;
-    tokens[data.index].gridY = data.y;
-    render(); // Redraw the screen
+// Add this listener at the bottom with your other socket.on events
+socket.on('addRemoteToken', function (data) {
+    tokens.push(data);
+    render();
+});
+
+io.on('connection', (socket) => {
+    socket.on('tokenMove', (data) => {
+        socket.broadcast.emit('tokenUpdate', data);
+    });
+
+    // NEW: Listen for new tokens and tell everyone else
+    socket.on('newToken', (data) => {
+        socket.broadcast.emit('addRemoteToken', data);
+    });
 });
 
 
