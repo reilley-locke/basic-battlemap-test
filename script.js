@@ -18,13 +18,12 @@ var bgImage = null;     // will hold the Image object once the user uploads one
 var bgScale = 1.0;      // zoom level for the background image
 
 
-// PLAYER PIECE
+// PLAYER PIECES
 // ---------------------
 // gridX and gridY are the column and row the piece is sitting on (starts at 2,2 to make aiming the piece easier for my sanity)
-var player = {
-    gridX: 2,
-    gridY: 2
-};
+var tokens = [
+    { gridX: 2, gridY: 2, color: "crimson" } // Start with one default token, at 2,2, colored red
+];
 
 
 // DRAG STATE
@@ -32,6 +31,7 @@ var player = {
 // tracks everything about the current drag gesture
 var drag = {
     active: false,      // is the player currently dragging? (boolean)
+    targetIndex: -1,    // ADDED: tracks which token in the list we are dragging
     startGX: 0,         // column (x-coord) where the drag started
     startGY: 0,         // row (y-coord) where the drag started
     visitedCells: []    // list of every cell the piece has passed through this drag
@@ -72,9 +72,11 @@ function resizeCanvas() {
     canvas.style.top = ctrlH + "px";
     canvas.style.left = "0px";
 
-    // if the grid shrank, make sure the player piece didn't end up outside it
-    if (player.gridX > COLS - 1) { player.gridX = COLS - 1; }
-    if (player.gridY > ROWS - 1) { player.gridY = ROWS - 1; }
+    // if the grid shrank, make sure the player pieces didn't end up outside it
+    for (var i = 0; i < tokens.length; i++) {
+        if (tokens[i].gridX > COLS - 1) { tokens[i].gridX = COLS - 1; }
+        if (tokens[i].gridY > ROWS - 1) { tokens[i].gridY = ROWS - 1; }
+    }
 }
 
 
@@ -126,20 +128,25 @@ function cellCenter(gx, gy) {
 // Only starts a drag if they clicked directly on the player piece.
 function onPointerDown(pageX, pageY) {
     var cell = pageToGrid(pageX, pageY);
-    if (cell == null) { return; }
+    if (cell == null) { return; } // If cell does not exit, blow up
 
-    // check if the click landed on the player's current cell
-    if (cell.gx == player.gridX && cell.gy == player.gridY) {
-        drag.active = true;
-        drag.startGX = player.gridX;
-        drag.startGY = player.gridY;
+    for (var i = 0; i < tokens.length; i++) { // ADDED: Loop for detecting which token is being touched
+        // check if the click landed on the player's current cell
+        if (cell.gx == tokens[i].gridX && cell.gy == tokens[i].gridY) {
+            drag.active = true;
+            drag.targetIndex = i; // Stores the index of the grabbed token for later
+            drag.startGX = tokens[i].gridX;
+            drag.startGY = tokens[i].gridY;
 
-        // the starting cell goes in the list but doesn't count as a move
-        drag.visitedCells = [{ x: player.gridX, y: player.gridY }];
+            // the starting cell goes in the list but doesn't count as a move
+            drag.visitedCells = [{ x: tokens[i].gridX, y: tokens[i].gridY }];
 
-        updateMoveInfo();
-        render(); // redraw so the piece visually responds the moment the drag begins
+            updateMoveInfo();
+            render();
+            return; //exits the loop once a match is found (don't keep going)
+        }
     }
+    render();
 }
 
 // Called while the player moves their finger/mouse during a drag.
@@ -153,8 +160,11 @@ function onPointerMove(pageX, pageY) {
     var gx = cell.gx;
     var gy = cell.gy;
 
+    // Use the index saved from onPointerDown
+    var currentToken = tokens[drag.targetIndex];
+
     // If already on this cell, nothing to do
-    if (gx == player.gridX && gy == player.gridY) { return; }
+    if (gx == currentToken.gridX && gy == currentToken.gridY) { return; }
 
     // check if the player is backtracking over a cell they already visited
     // if so, we "undo" moves back to that point instead of adding new ones
@@ -169,8 +179,8 @@ function onPointerMove(pageX, pageY) {
     if (foundAt != -1) {
         // trim the list back to the cell they returned to
         drag.visitedCells = drag.visitedCells.slice(0, foundAt + 1);
-        player.gridX = gx;
-        player.gridY = gy;
+        currentToken.gridX = gx;
+        currentToken.gridY = gy;
         updateMoveInfo();
         render();
         return;
@@ -185,8 +195,8 @@ function onPointerMove(pageX, pageY) {
 
     // movement is allowed, add the cell and update the piece position
     drag.visitedCells.push({ x: gx, y: gy });
-    player.gridX = gx;
-    player.gridY = gy;
+    currentToken.gridX = gx;
+    currentToken.gridY = gy;
     updateMoveInfo();
     render();
 }
@@ -220,7 +230,7 @@ function updateMoveInfo() {
 // ─────────────────────────────────────────────
 
 function render() {
-    // clear whatever was drawn last frame
+    // Clear whatever was drawn last frame (otherwise it all stacks)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // --- 1. Draw the background ---
@@ -269,18 +279,37 @@ function render() {
         }
     }
 
-    // --- 4. Draw the player piece (red circle) ---
-    var center = cellCenter(player.gridX, player.gridY);
-    var radius = cellSize * 0.38; // slightly smaller than the cell so there's a gap
+    // --- 4. Draw the player tokens ---
+    for (var i = 0; i < tokens.length; i++) {
+        var T = tokens[i];
+        var center = cellCenter(T.gridX, T.gridY);
+        var radius = cellSize * 0.38;
 
-    ctx.beginPath();
-    ctx.arc(center.cx, center.cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "crimson";
-    ctx.fill();
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(center.cx, center.cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = T.color; // Use the color stored in the token object
+        ctx.fill();
+        ctx.strokeStyle = T.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
 }
+
+
+
+function generateRandomRgbColor() {
+    const r = Math.floor(Math.random() * 256); // Random number between 0-255
+    const g = Math.floor(Math.random() * 256); 
+    const b = Math.floor(Math.random() * 256); 
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Example Usage:
+console.log(generateRandomRgbColor());
+// Example output: rgb(193, 253, 111)
+
+
 
 
 // ─────────────────────────────────────────────
@@ -289,18 +318,18 @@ function render() {
 
 // --- Pointer events (works for both mouse and touch) ---
 
-canvas.addEventListener("pointerdown", function(e) {
+canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     onPointerDown(e.clientX, e.clientY);
 }, { passive: false });  // passive: false lets preventDefault() actually work on touch
 
-canvas.addEventListener("pointermove", function(e) {
+canvas.addEventListener("pointermove", function (e) {
     e.preventDefault();
     onPointerMove(e.clientX, e.clientY);
 }, { passive: false });
 
-canvas.addEventListener("pointerup", function(e) {
+canvas.addEventListener("pointerup", function (e) {
     e.preventDefault();
     onPointerUp();
 }, { passive: false });
@@ -370,6 +399,17 @@ document.getElementById("bgScale").addEventListener("input", function () {
 window.addEventListener("resize", function () {
     resizeCanvas();
     render();
+});
+
+// NEW: --- Add token ---
+document.getElementById("addTokenBtn").addEventListener("click", function () {
+    // Add a new token object to  array
+    tokens.push({
+        gridX: 1,
+        gridY: 1,
+        color: generateRandomRgbColor() // Give new tokens a different color to start (generates random)
+    });
+    render(); // Redraw to show the new token
 });
 
 
