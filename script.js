@@ -138,6 +138,7 @@ function onPointerDown(pageX, pageY) {
         drag.visitedCells = [{ x: player.gridX, y: player.gridY }];
 
         updateMoveInfo();
+        render(); // redraw so the piece visually responds the moment the drag begins
     }
 }
 
