@@ -428,6 +428,14 @@ document.getElementById("addTokenBtn").addEventListener("click", function () {
     render(); 
 });
 
+// NEW: --- Disable right-click menu (which happens when long-pressing on a touchscreen; it can mess with the piece movement) ---
+// Source - https://stackoverflow.com/a/737043
+// Posted by cletus, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-03-20, License - CC BY-SA 3.0
+
+document.addEventListener('contextmenu', event => event.preventDefault());
+
+
 // 1. Listen for moves from others
 socket.on('tokenUpdate', function (data) {
     if (tokens[data.index]) {
