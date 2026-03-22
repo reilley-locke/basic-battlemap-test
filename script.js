@@ -29,6 +29,8 @@ var tokens =
 [
     { gridX: 2, gridY: 2, color: "crimson" } // Start with one default token, at 2,2, colored red
 ];
+// Global variable for Croppie
+var croppieInstance = null;
 
 
 // DRAG STATE
@@ -50,6 +52,7 @@ var drag =
 // Sets up the Javascript Canvas stuff
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
+
 
 
 
@@ -263,7 +266,8 @@ function onPointerUp()
 
 // ╒════════════════════════════════════════════════════════╕
 //    FUNCTIONS: UI HELPERS
-//      > Currently only updates move info in control bar
+//      > Updates move info in top right corner
+//      > Deals with "add token" logic
 // ╘════════════════════════════════════════════════════════╛
 
 // Updates the "Movement: X / 6 squares" text in the controls bar
@@ -274,6 +278,32 @@ function updateMoveInfo() {
         movesUsed = drag.visitedCells.length - 1;
     }
     document.getElementById("movementInfo").textContent = "Movement: " + movesUsed + " / " + MAX_MOVES + " squares";
+}
+
+// Helper function to create the player token object
+function spawnToken(tokenInfo) 
+{
+    var newToken = {
+        gridX: 1,
+        gridY: 1,
+        type: tokenInfo.type,
+        color: tokenInfo.color || "white",
+        imgData: tokenInfo.imgData || null,
+        imgTag: null // This will hold the actual Image object
+    };
+
+    // If it's an image, we need to convert the text (base64) into an actual Image object
+    if (newToken.type === 'image') 
+    {
+        var img = new Image();
+        img.onload = function() { render(); };
+        img.src = newToken.imgData;
+        newToken.imgTag = img;
+    }
+
+    tokens.push(newToken);
+    socket.emit('newToken', newToken); 
+    render();
 }
 
 
@@ -350,13 +380,34 @@ function render() {
         var center = cellCenter(T.gridX, T.gridY);
         var radius = cellSize * 0.38;
 
-        ctx.beginPath();
-        ctx.arc(center.cx, center.cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = T.color; // Use the color stored in the token object
-        ctx.fill();
-        ctx.strokeStyle = T.color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if (T.type === 'image' && T.imgTag)
+        {
+            // --- Draw token with image ---
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(center.cx, center.cy, radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip(); // Clip the drawing area to a circle
+            
+            ctx.drawImage(T.imgTag, center.cx - radius, center.cy - radius, radius * 2, radius * 2);
+            ctx.restore();
+            
+            // Draw a border/"frame"
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        else 
+        {
+            ctx.beginPath();
+            ctx.arc(center.cx, center.cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = T.color; // Use the color stored in the token object
+            ctx.fill();
+            ctx.strokeStyle = T.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
     }
 }
 
@@ -414,8 +465,9 @@ document.getElementById("applyBtn").addEventListener("click", function ()
     var input = document.getElementById("cellSizeInput");
     var newSize = parseInt(input.value);
 
-    // make sure it's a valid number within the allowed range
-    if (isNaN(newSize) || newSize < 10 || newSize > 200) {
+    // Make sure it's a valid number within the allowed range (negatives would probably make the site explode, plus having too big of a number could be troublesome)
+    if (isNaN(newSize) || newSize < 10 || newSize > 200) 
+    {
         return;
     }
 
@@ -429,7 +481,8 @@ document.getElementById("applyBtn").addEventListener("click", function ()
 // (I realized this was annoying when I automatically tried to press enter and nothing happened lol)
 document.getElementById("cellSizeInput").addEventListener("keydown", function (e) 
 {
-    if (e.key == "Enter") {
+    if (e.key == "Enter") 
+    {
         document.getElementById("applyBtn").click();
     }
 });
@@ -438,13 +491,17 @@ document.getElementById("cellSizeInput").addEventListener("keydown", function (e
 document.getElementById("bgUpload").addEventListener("change", function () 
 {
     var file = this.files[0];
-    if (!file) { return; }
+    if (!file) 
+    { 
+        return; 
+    }
 
     // create a temporary URL for the selected file so it can load
     var url = URL.createObjectURL(file);
 
     var img = new Image();
-    img.onload = function () {
+    img.onload = function () 
+    {
         bgImage = img;
 
         // default scale: fit the image to the canvas height
@@ -477,19 +534,43 @@ window.addEventListener("resize", function ()
 
 
 // NEW: --- Add new player token ---
-document.getElementById("addTokenBtn").addEventListener("click", function () 
-{
-    var newToken = {
-        gridX: 1,
-        gridY: 1,
-        color: generateRandomRgbColor()
-    };
-    tokens.push(newToken);
+// UPDATE: Redone to use Croppie for player images
+document.getElementById("addTokenBtn").addEventListener("click", function () {
+    document.getElementById('tokenModal').style.display = 'block'; // Make the popup for options show up
+});
 
-    // TELL THE SERVER
-    socket.emit('newToken', newToken);
+// Color Palette Selection
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', function() {
+        spawnToken({ type: 'color', color: this.dataset.color });
+        document.getElementById('tokenModal').style.display = 'none';
+    });
+});
 
-    render();
+// Handling Image Upload via Croppie
+document.getElementById('tokenImageInput').addEventListener('change', function() {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('croppie-demo').style.display = 'block';
+        document.getElementById('saveImageBtn').style.display = 'inline-block';
+        
+        if (croppieInstance) { croppieInstance.destroy(); }
+        
+        croppieInstance = new Croppie(document.getElementById('croppie-demo'), {
+            viewport: { width: 100, height: 100, type: 'circle' },
+            boundary: { width: 200, height: 200 },
+            showZoomer: true
+        });
+        croppieInstance.bind({ url: e.target.result });
+    }
+    reader.readAsDataURL(this.files[0]);
+});
+
+document.getElementById('saveImageBtn').addEventListener('click', function() {
+    croppieInstance.result({ type: 'base64', size: 'viewport', format: 'png', circle: true }).then(function(base64) {
+        spawnToken({ type: 'image', imgData: base64 });
+        document.getElementById('tokenModal').style.display = 'none';
+    });
 });
 
 // NEW: --- Disable right-click menu (which happens when long-pressing on a touchscreen; it can mess with the piece movement) ---
@@ -509,7 +590,8 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 // Listen for moves from others
 socket.on('tokenUpdate', function (data) 
 {
-    if (tokens[data.index]) {
+    if (tokens[data.index]) 
+    {
         tokens[data.index].gridX = data.x;
         tokens[data.index].gridY = data.y;
         render();
@@ -517,8 +599,14 @@ socket.on('tokenUpdate', function (data)
 });
 
 // Listen for new player tokens and display them on other clients
-socket.on('addRemoteToken', function (data) 
-{
+// UPDATED for player image tokens
+socket.on('addRemoteToken', function (data) {
+    if (data.type === 'image') {
+        var img = new Image();
+        img.onload = function() { render(); };
+        img.src = data.imgData;
+        data.imgTag = img;
+    }
     tokens.push(data);
     render();
 });

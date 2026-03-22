@@ -11,6 +11,39 @@
 </head>
 
 <body>
+  <!-- NEW: Croppie.js library addition for player token image cropping -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
+
+  <!-- NEW: Pop-up (modal) div for player token options (can either upload an image or choose a color)-->
+  <div id="tokenModal" class="modal">
+    <div class="modal-content">
+      <h3>Add New Token</h3>
+
+      <p>Pick a Color:</p>
+      <div id="palette">
+        <div class="color-swatch" style="background: crimson;" data-color="crimson"></div>
+        <div class="color-swatch" style="background: orange;" data-color="orange"></div>
+        <div class="color-swatch" style="background: gold;" data-color="gold"></div>
+        <div class="color-swatch" style="background: seagreen;" data-color="seagreen"></div>
+        <div class="color-swatch" style="background: royalblue;" data-color="royalblue"></div>
+        <div class="color-swatch" style="background: rebeccapurple;" data-color="rebeccapurple"></div>
+        <div class="color-swatch" style="background: white;" data-color="white"></div>
+        <div class="color-swatch" style="background: black;" data-color="black"></div>
+      </div>
+
+      <hr> <!-- Horizontal break/line to make it look nice :) -->
+
+      <p>Or Upload an Image:</p>
+      <input type="file" id="tokenImageInput" accept="image/*">
+      <div id="croppie-demo" style="display:none; margin-top:10px;"></div>
+      <button id="saveImageBtn" style="display:none;">Crop & Add Image</button>
+
+      <br>
+      <button onclick="document.getElementById('tokenModal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+
 
   <!-- Controls bar at the top of the screen (said bar is for now just where everything is controlled from) -->
   <div id="controls">
@@ -42,7 +75,7 @@
 
   <!-- Link to WebSocket Socket.io thingy (the thing that syncs stuff between devices) -->
   <script src="/socket.io/socket.io.js"></script>
-  
+
   <!-- Link to JavaScript file that takes care of the script aspects (wow crazy!!) -->
   <script src="script.js"></script>
 
