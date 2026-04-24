@@ -472,6 +472,9 @@ document.getElementById("applyBtn").addEventListener("click", function ()
     }
 
     cellSize = newSize;
+
+    socket.emit('updateCellSize', cellSize);
+
     resizeCanvas();
     render();
 });
@@ -488,39 +491,45 @@ document.getElementById("cellSizeInput").addEventListener("keydown", function (e
 });
 
 // --- Background image upload ---
-document.getElementById("bgUpload").addEventListener("change", function () 
-{
+document.getElementById("bgUpload").addEventListener("change", function () {
     var file = this.files[0];
-    if (!file) 
-    { 
-        return; 
-    }
+    if (!file) return;
 
-    // create a temporary URL for the selected file so it can load
-    var url = URL.createObjectURL(file);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var base64Data = e.target.result;
+        
+        // Load it locally
+        loadNewBackground(base64Data);
+        
+        // SHOUT TO OTHERS
+        socket.emit('updateBgImage', base64Data);
+    };
+    reader.readAsDataURL(file);
+});
 
+// Helper function to handle the image loading logic
+function loadNewBackground(data) {
     var img = new Image();
-    img.onload = function () 
-    {
+    img.onload = function () {
         bgImage = img;
-
-        // default scale: fit the image to the canvas height
         bgScale = canvas.height / img.naturalHeight;
-
-        // update the slider to match and show it
         document.getElementById("bgScale").value = bgScale.toFixed(2);
         document.getElementById("scaleLabel").style.display = "inline-flex";
-
         render();
     };
-    img.src = url;
-});
+    img.src = data;
+}
 
 
 // --- Background scale slider ---
 document.getElementById("bgScale").addEventListener("input", function () 
 {
     bgScale = parseFloat(this.value);
+
+    // SHOUT TO OTHERS
+    socket.emit('updateBgScale', bgScale);
+
     render();
 });
 
@@ -611,6 +620,22 @@ socket.on('addRemoteToken', function (data) {
     render();
 });
 
+socket.on('remoteCellSize', function(size) {
+    cellSize = size;
+    document.getElementById("cellSizeInput").value = size; // Update the UI box too!
+    resizeCanvas();
+    render();
+});
+
+socket.on('remoteBgImage', function(data) {
+    loadNewBackground(data);
+});
+
+socket.on('remoteBgScale', function(scale) {
+    bgScale = scale;
+    document.getElementById("bgScale").value = scale; // Sync the slider position
+    render();
+});
 
 
 

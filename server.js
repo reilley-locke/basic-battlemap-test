@@ -17,6 +17,21 @@ io.on('connection', (socket) => {
     socket.on('newToken', (data) => {
         socket.broadcast.emit('addRemoteToken', data);
     });
+
+    // Sync Cell Size
+    socket.on('updateCellSize', (size) => {
+        socket.broadcast.emit('remoteCellSize', size);
+    });
+
+    // Sync Background Scale
+    socket.on('updateBgScale', (scale) => {
+        socket.broadcast.emit('remoteBgScale', scale);
+    });
+
+    // Sync Background Image
+    socket.on('updateBgImage', (imageData) => {
+        socket.broadcast.emit('remoteBgImage', imageData);
+    });
 });
 
 const PORT = process.env.PORT || 3000;
