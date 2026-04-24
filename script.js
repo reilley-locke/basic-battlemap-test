@@ -9,7 +9,7 @@ var socket = io();
 
 // SETTINGS
 // --------------------
-var cellSize = 60;      // how many pixels wide/tall each grid square is
+var cellSize = 90;      // how many pixels wide/tall each grid square is
 var MAX_MOVES = 6;      // how many squares a piece is allowed to move per turn
 // COLS and ROWS get calculated in resizeCanvas() based on screen size, so for now they're 0
 var COLS = 0;
